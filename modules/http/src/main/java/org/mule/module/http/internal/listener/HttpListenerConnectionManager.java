@@ -15,16 +15,9 @@ import org.mule.api.lifecycle.Disposable;
 import org.mule.api.lifecycle.Initialisable;
 import org.mule.api.lifecycle.InitialisationException;
 import org.mule.config.i18n.CoreMessages;
-import org.mule.module.http.internal.listener.grizzly.GrizzlyServerManager;
 import org.mule.transport.ssl.api.TlsContextFactory;
-import org.mule.transport.tcp.DefaultTcpServerSocketProperties;
-import org.mule.transport.tcp.TcpServerSocketProperties;
-import org.mule.util.concurrent.ThreadNameHelper;
-
-import com.google.common.collect.Iterables;
 
 import java.io.IOException;
-import java.util.Collection;
 
 public class HttpListenerConnectionManager implements Initialisable, Disposable, MuleContextAware
 {
@@ -41,27 +34,28 @@ public class HttpListenerConnectionManager implements Initialisable, Disposable,
     @Override
     public void initialise() throws InitialisationException
     {
-        Collection<TcpServerSocketProperties> tcpServerSocketPropertiesBeans = muleContext.getRegistry().lookupObjects(TcpServerSocketProperties.class);
-        TcpServerSocketProperties tcpServerSocketProperties = new DefaultTcpServerSocketProperties();
-
-        if (tcpServerSocketPropertiesBeans.size() == 1)
-        {
-            tcpServerSocketProperties = Iterables.getOnlyElement(tcpServerSocketPropertiesBeans);
-        }
-        else if (tcpServerSocketPropertiesBeans.size() > 1)
-        {
-            throw new InitialisationException(CoreMessages.createStaticMessage("Only one global TCP server socket properties bean should be defined in the config"), this);
-        }
-
-        String threadNamePrefix = ThreadNameHelper.getPrefix(muleContext) + LISTENER_THREAD_NAME_PREFIX;
-        try
-        {
-            httpServerManager = new GrizzlyServerManager(threadNamePrefix, httpListenerRegistry, tcpServerSocketProperties);
-        }
-        catch (IOException e)
-        {
-            throw new InitialisationException(e, this);
-        }
+        throw new RuntimeException();
+        //Collection<TcpServerSocketProperties> tcpServerSocketPropertiesBeans = muleContext.getRegistry().lookupObjects(TcpServerSocketProperties.class);
+        //TcpServerSocketProperties tcpServerSocketProperties = new DefaultTcpServerSocketProperties();
+        //
+        //if (tcpServerSocketPropertiesBeans.size() == 1)
+        //{
+        //    tcpServerSocketProperties = Iterables.getOnlyElement(tcpServerSocketPropertiesBeans);
+        //}
+        //else if (tcpServerSocketPropertiesBeans.size() > 1)
+        //{
+        //    throw new InitialisationException(CoreMessages.createStaticMessage("Only one global TCP server socket properties bean should be defined in the config"), this);
+        //}
+        //
+        //String threadNamePrefix = ThreadNameHelper.getPrefix(muleContext) + LISTENER_THREAD_NAME_PREFIX;
+        //try
+        //{
+        //    httpServerManager = new GrizzlyServerManager(threadNamePrefix, httpListenerRegistry, tcpServerSocketProperties);
+        //}
+        //catch (IOException e)
+        //{
+        //    throw new InitialisationException(e, this);
+        //}
 
     }
 

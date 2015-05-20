@@ -14,6 +14,7 @@ import org.mule.api.MessagingException;
 import org.mule.api.MuleContext;
 import org.mule.api.MuleEvent;
 import org.mule.api.MuleException;
+import org.mule.api.MuleMessage;
 import org.mule.api.endpoint.InboundEndpoint;
 import org.mule.api.execution.ExecutionCallback;
 import org.mule.api.execution.ExecutionTemplate;
@@ -27,6 +28,7 @@ import org.mule.api.processor.ProcessingStrategy;
 import org.mule.api.processor.SequentialStageNameSource;
 import org.mule.api.processor.StageNameSource;
 import org.mule.api.processor.StageNameSourceProvider;
+import org.mule.api.transport.ExceptionHandlingReplyToHandlerDecorator;
 import org.mule.api.transport.ReplyToHandler;
 import org.mule.config.i18n.CoreMessages;
 import org.mule.construct.flow.DefaultFlowProcessingStrategy;
@@ -34,9 +36,11 @@ import org.mule.construct.processor.FlowConstructStatisticsMessageProcessor;
 import org.mule.execution.ErrorHandlingExecutionTemplate;
 import org.mule.interceptor.ProcessingTimeInterceptor;
 import org.mule.management.stats.FlowConstructStatistics;
+import org.mule.processor.NonBlockingMessageProcessor;
 import org.mule.processor.strategy.AsynchronousProcessingStrategy;
 import org.mule.processor.strategy.QueuedAsynchronousProcessingStrategy;
 import org.mule.routing.requestreply.AsyncReplyToPropertyRequestReplyReplier;
+import org.mule.transport.DefaultReplyToHandler;
 
 /**
  * This implementation of {@link AbstractPipeline} adds the following functionality:
@@ -66,10 +70,37 @@ public class Flow extends AbstractPipeline implements MessageProcessor, StageNam
     @Override
     public MuleEvent process(final MuleEvent event) throws MuleException
     {
-        Object replyToDestination = event.getReplyToDestination();
-        ReplyToHandler replyToHandler = event.getReplyToHandler();
+        final Object replyToDestination = event.getReplyToDestination();
+        final ReplyToHandler replyToHandler = event.getReplyToHandler();
 
-        final MuleEvent newEvent = new DefaultMuleEvent(event, this, null, null);
+        ReplyToHandler nonBlockingReplyToHandler = new
+                ExceptionHandlingReplyToHandlerDecorator(new ReplyToHandler()
+        {
+            @Override
+            public void processReplyTo(MuleEvent result, MuleMessage returnMessage, Object replyTo) throws MuleException
+            {
+                if (result != null && !(result instanceof VoidMuleEvent))
+                {
+                    result = new DefaultMuleEvent(result, event.getFlowConstruct(), replyToHandler, replyToDestination);
+                }
+                RequestContext.setEvent(event);
+                releaseEvent(event);
+                replyToHandler.processReplyTo(new DefaultMuleEvent(result, event.getFlowConstruct(), replyToHandler,
+                                                                   replyToDestination), null, null);
+            }
+
+            @Override
+            public void processExceptionReplyTo(MessagingException exception, Object replyTo)
+            {
+                exception.setProcessedEvent(new DefaultMuleEvent(exception.getEvent(),event.getFlowConstruct()));
+                RequestContext.setEvent(event);
+                releaseEvent(event);
+                replyToHandler.processExceptionReplyTo(exception, null);
+            }
+        }, getExceptionListener());
+
+        final MuleEvent newEvent = new DefaultMuleEvent(event, this, event.isAllowNonBlocking() ? replyToHandler : null,
+                                                        replyToDestination, event.isSynchronous() || isSynchronous());
         RequestContext.setEvent(newEvent);
         try
         {
@@ -82,15 +113,12 @@ public class Flow extends AbstractPipeline implements MessageProcessor, StageNam
                 {
                     MuleEvent result = pipeline.process(newEvent);
 
-                    if (result != null && !VoidMuleEvent.getInstance().equals(result))
-                    {
-                        result.getMessage().release();
-                    }
+                    releaseEvent(result);
                     return result;
                 }
             });
 
-            if (result != null && !VoidMuleEvent.getInstance().equals(result))
+            if (result != null && !(result instanceof VoidMuleEvent))
             {
                 result = new DefaultMuleEvent(result, event.getFlowConstruct(), replyToHandler, replyToDestination);
             }
@@ -109,6 +137,14 @@ public class Flow extends AbstractPipeline implements MessageProcessor, StageNam
         {
             RequestContext.setEvent(event);
             event.getMessage().release();
+        }
+    }
+
+    private void releaseEvent(MuleEvent result)
+    {
+        if (result != null && !(result instanceof VoidMuleEvent))
+        {
+            result.getMessage().release();
         }
     }
 
